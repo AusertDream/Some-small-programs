@@ -1,0 +1,31 @@
+//自动评教的另外一个版本
+{
+    const evaluate = true
+    const button = true
+    const div = $("html body div#BodyBg div#MainBody.bg1 div#main._ajax_target table.indexpanel tbody tr td.index_content div#contentDiv._ajax_target form#evaluateEditForm.listform fieldset ol li table.gridtable tbody#evaluateTB tr")
+    {
+        $(`input[value='${evaluate ? 92 : 90}']`).attr('checked', 'true');
+        let i = evaluate ? 97 : 94
+        Array.from(Array(20).keys())
+            .map(e => e * 4)
+            .map(e => e + i)
+            .forEach(e => $(`input[value='${e}']`).attr('checked', 'true'))
+    }
+
+    {
+        [-2, -1].forEach(e => {
+            if (evaluate == [346, 348, 349, 354, 355, 356, 357].includes(
+                Number.parseInt($(div.eq(e).find("input")[0]).attr("name").substr(6)))
+            )
+                (div.eq(e).find(`input[value='89']`).attr('checked', 'true'))
+            else
+                (div.eq(e).find(`input[value='86']`).attr('checked', 'true'))
+        })
+    }
+    {
+        if (button) 
+            $("html body div#BodyBg div#MainBody.bg1 div#main._ajax_target table.indexpanel tbody tr td.index_content div#contentDiv._ajax_target form#evaluateEditForm.listform fieldset ol li.foot input#btnSave").click()
+        
+    }
+    
+}
