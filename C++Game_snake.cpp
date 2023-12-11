@@ -15,6 +15,7 @@ using namespace std;
 typedef pair<int, int> PII;
 #define frame_width 50
 #define frame_height 25
+const int INF = 0x3f3f3f3f;
 
 typedef struct Food {
     int x, y;
@@ -31,7 +32,7 @@ typedef struct Snake {
         return score < a.score;
     }
     bool operator != (const Snake& other) const {
-        if (len != other.len||state!=other.state||speed!=other.speed||score!=other.score) {
+        if (len != other.len || state != other.state || speed != other.speed || score != other.score) {
             return true;
         }
         for (int i = 1; i <= len; i++) {
@@ -53,22 +54,25 @@ void check_foodeating(Snake& snake, bool& isEaten);
 bool check_snakealive(Snake& snake);
 void SummonNewWall(); //生成新的墙壁
 void AIsnake(); //AI蛇
-void move_snake_ai(Snake& snake, bool AIisEaten); //AI蛇移动
+void move_snake_ai(Snake& snake, bool& AIisEaten); //AI蛇移动
 char AICheckWheretogo(Snake&); //AI蛇检查下一步该往哪走
+void check_foodeating_ai(Snake& snake, bool& isEaten); //检查AI蛇是否吃到食物
 
 
 
 Snake usersnake; //玩家操控的蛇
 map<PII, Food> foodlist; //食物列表
 set<PII> WallList;//墙壁列表
-set<Snake> AIsnakeList; //AI蛇列表
+map<int,Snake> AIsnakeList; //AI蛇列表
 bool check_eaten; //检查有没有吃到食物
 int MaxScore = 0; //历史最高分
-int AICnt = 0;
-bool onGame=false;
+int AICnt = 0; //当前AI蛇数量
+bool onGame = false;
+int allAISnakeCnt = 0; //AI蛇总数
 
 mutex Protectusersnake;//保护玩家的蛇
-mutex Protectfooldlist;
+mutex ProtectallAISnakeCnt;
+mutex Protectfoodlist;
 mutex ProtectWallList, ProtectAIsnakeList, ProtectCursor;
 mutex ProtectAICnt;
 mutex ProtectonGame;
@@ -80,7 +84,7 @@ int main()
     {
         system("cls");
         cout << "欢迎游玩贪吃蛇小游戏！" << endl;
-        cout << "输入1开始游戏，输入2查看历史最高分，输入3退出游戏" << endl;
+        cout << "输入1开始游戏，输入2查看历史最高分，输入3查看游戏规则，输入4退出游戏" << endl;
         int op;
         cin >> op;
         if (op == 1) {
@@ -102,7 +106,9 @@ int main()
                     if (!check_snakealive(usersnake))
                         break;
                     srand(time(0));
+                    Protectfoodlist.lock();
                     int n = foodlist.size();
+                    Protectfoodlist.unlock();
                     if (rand() % 100 + 1 <= max(10, 100 - n * 10)) {
                         get_newfood();
                     }
@@ -111,12 +117,12 @@ int main()
                             SummonNewWall();
                         }
                     }
-                    if (usersnake.score >= 0) {
-                        if (rand() % 100 + 1 <= 100) {
-                            ProtectAICnt.lock();
-                            int n = AICnt;
-                            ProtectAICnt.unlock();
-                            if (n < 3) {
+                    if (usersnake.score >= 200) {
+                        ProtectAICnt.lock();
+                        int m = AICnt;
+                        ProtectAICnt.unlock();
+                        if (rand() % 100 + 1 <= max(1,10-4*m)) {
+                            if (m < 3) {
                                 thread thai(AIsnake);
                                 thai.detach();
                             }
@@ -124,18 +130,32 @@ int main()
                     }
                 }
                 //清空食物列表
+                Protectfoodlist.lock();
                 foodlist.clear();
+                Protectfoodlist.unlock();
                 //清空墙壁列表
+                ProtectWallList.lock();
                 WallList.clear();
+                ProtectWallList.unlock();
                 //清空ai蛇列表
+                ProtectAIsnakeList.lock();
                 AIsnakeList.clear();
+                ProtectAIsnakeList.unlock();
+
+                ProtectCursor.lock();
+                gotoxy(frame_height, 0);
                 printf("Game Over!\n");
+                ProtectCursor.unlock();
                 ProtectonGame.lock();
                 onGame = false;
                 ProtectonGame.unlock();
                 printf("1:重新开始\t2:退出\n");
                 MaxScore = max(MaxScore, usersnake.score);
                 char com2;
+                Sleep(80);
+                ProtectCursor.lock();
+                gotoxy(frame_height + 3, 0);
+                ProtectCursor.unlock();
                 cin >> com2;
                 if (com2 == '2')
                     break;
@@ -146,6 +166,36 @@ int main()
             system("pause");
         }
         else if (op == 3) {
+            system("cls");
+            gotoxy(2,  3);
+            cout << "欢迎来到贪吃蛇小游戏！";
+            gotoxy(4,  3);
+            cout << "操作说明：";
+            gotoxy(6,  3);
+            cout << "向上：W";
+            gotoxy(8,  3);
+            cout << "向下：S";
+            gotoxy(10,  3);
+            cout << "向左：A";
+            gotoxy(12,  3);
+            cout << "向右：D";
+            
+            gotoxy(4,  15);
+            cout << "情景说明：";
+            gotoxy(6,  15);
+            cout << "￥:10-20分*一定基于你长度的倍率";
+            gotoxy(8,  15);
+            cout << "$:1-10分*一定基于你长度的倍率";
+            gotoxy(10,  15);
+            cout << "#:障碍物，碰到会死亡,100分之后额外随机生成";
+            gotoxy(12,  15);
+            cout << "%:AI蛇，死后有亡语，200分之后额外随机生成";
+            gotoxy(16, 3);
+            cout << "按数字键1,2,3,4进行变速";
+            cout << endl;
+            system("pause");
+        }
+        else if (op == 4) {
             break;
         }
         else {
@@ -232,8 +282,20 @@ void print_map()
     cout << "向左：A";
     gotoxy(12, frame_width + 3);
     cout << "向右：D";
+    gotoxy(16,frame_width + 3);
+    cout << "按数字键1,2,3,4进行变速";
     gotoxy(20, frame_width + 3);
     printf("你的分数 : %d", usersnake.score);
+    gotoxy(4, frame_width + 15);
+    cout << "情景说明：";
+    gotoxy(6, frame_width + 15);
+    cout<<"￥:10-20分*一定基于你长度的倍率";
+    gotoxy(8, frame_width + 15);
+    cout << "$:1-10分*一定基于你长度的倍率";
+    gotoxy(10, frame_width + 15);
+    cout << "#:障碍物，碰到会死亡,100分之后额外随机生成";
+    gotoxy(12, frame_width + 15);
+    cout << "%:AI蛇，死后有亡语，200分之后额外随机生成";
 }
 
 bool check_foodisok(Food tempf)
@@ -247,8 +309,8 @@ bool check_foodisok(Food tempf)
             return 1;
     //检查是否和AI蛇重合
     for (auto& e : AIsnakeList) {
-        for (int i = 1; i <= e.len; i++)
-            if (e.x[i] == tempf.x && e.y[i] == tempf.y)
+        for (int i = 1; i <= e.second.len; i++)
+            if (e.second.x[i] == tempf.x && e.second.y[i] == tempf.y)
                 return 1;
     }
     //检查是否和墙壁重合
@@ -267,6 +329,7 @@ void get_newfood()
         tempf.y = rand() % (frame_width - 2) + 1;
 
     } while (check_foodisok(tempf));
+    ProtectCursor.lock();
     gotoxy(tempf.x, tempf.y);
     if (rand() % 100 + 1 <= 30) {
         cout << "￥";
@@ -276,7 +339,10 @@ void get_newfood()
         cout << "$";
         tempf.score = rand() % 10 + 1;
     }
+    ProtectCursor.unlock();
+    Protectfoodlist.lock();
     foodlist[make_pair(tempf.x, tempf.y)] = tempf;
+    Protectfoodlist.unlock();
 }
 
 void move_snake(Snake& snake)
@@ -401,15 +467,44 @@ void check_foodeating(Snake& snake, bool& isEaten)
 {
     //检查当前蛇头位置是否和食物重合
     PII cor = make_pair(snake.x[1], snake.y[1]);
+    Protectfoodlist.lock();
     if (foodlist.find(cor) != foodlist.end())
     {
+        Protectusersnake.lock();
         snake.score += foodlist[cor].score * (snake.len / 5 + 1);
+        Protectusersnake.unlock(); 
         foodlist.erase(cor);
+        Protectfoodlist.unlock();
         isEaten = 1;
         gotoxy(20, frame_width + 3);
+        Protectusersnake.lock();
         printf("你的分数 : %d", snake.score);
         snake.len++;
+        Protectusersnake.unlock();
+        return;
     }
+    Protectfoodlist.unlock();
+}
+
+void check_foodeating_ai(Snake& snake, bool& isEaten) {
+    //检查当前蛇头位置是否和食物重合
+    PII cor = make_pair(snake.x[1], snake.y[1]);
+    Protectfoodlist.lock();
+    if (foodlist.find(cor) != foodlist.end())
+    {
+        Protectusersnake.lock();
+        snake.score += foodlist[cor].score * (snake.len / 5 + 1);
+        Protectusersnake.unlock();
+        foodlist.erase(cor);
+        Protectfoodlist.unlock();
+        isEaten = 1;
+        gotoxy(20, frame_width + 3);
+        Protectusersnake.lock();
+        snake.len++;
+        Protectusersnake.unlock();
+        return;
+    }
+    Protectfoodlist.unlock();
 }
 
 bool check_snakealive(Snake& snake)
@@ -437,9 +532,9 @@ bool check_snakealive(Snake& snake)
     }
     //检测有没有撞到其他ai蛇
     for (auto& e : AIsnakeList) {
-        if (e != snake) {
-            for (int i = 1; i <= e.len; i++) {
-                if (snake.x[1] == e.x[i] && snake.y[1] == e.y[i]) {
+        if (e.second != snake) {
+            for (int i = 1; i <= e.second.len; i++) {
+                if (snake.x[1] == e.second.x[i] && snake.y[1] == e.second.y[i]) {
                     return 0;
                 }
             }
@@ -455,35 +550,54 @@ void SummonNewWall()
     int y = rand() % (frame_width - 2) + 1;
     auto check = [&](int x, int y) {
         //检查是否和食物重合
+        Protectfoodlist.lock();
         if (foodlist.find(make_pair(x, y)) != foodlist.end()) {
+            Protectfoodlist.unlock();
             return false;
         }
+        Protectfoodlist.unlock();
         //检查是否和玩家蛇重合
         for (int i = 1; i <= usersnake.len; i++)
             if (usersnake.x[i] == x && usersnake.y[i] == y)
                 return false;
         //检查是否和墙壁重合
+        ProtectWallList.lock();
         if (WallList.find(make_pair(x, y)) != WallList.end()) {
+            ProtectWallList.unlock();
             return false;
         }
+        ProtectWallList.unlock();
         //检查是否和AI蛇重合
+        ProtectAIsnakeList.lock();
         for (auto& e : AIsnakeList) {
-            for (int i = 1; i <= e.len; i++)
-                if (e.x[i] == x && e.y[i] == y)
+            for (int i = 1; i <= e.second.len; i++) {
+                if (e.second.x[i] == x && e.second.y[i] == y) {
+                    ProtectAIsnakeList.unlock();
                     return false;
+                }
+            }
         }
+        ProtectAIsnakeList.unlock();
         return true;
         };
     //检查是否可以放置
     if (check(x, y)) {
+        ProtectCursor.lock();
         gotoxy(x, y);
         cout << "#";
+        ProtectCursor.unlock();
+        ProtectWallList.lock();
         WallList.insert(make_pair(x, y));
+        ProtectWallList.unlock();
     }
 }
 
 void AIsnake()
 {
+    int myid;
+    ProtectallAISnakeCnt.lock();
+    myid = allAISnakeCnt++;
+    ProtectallAISnakeCnt.unlock();
     Snake aisnake;
     //蛇身初始化
     aisnake.len = 2;
@@ -513,8 +627,8 @@ void AIsnake()
                     return false;
             //检查是否和AI蛇重合
             for (auto& e : AIsnakeList) {
-                for (int i = 1; i <= e.len; i++)
-                    if (e.x[i] == x && e.y[i] == y)
+                for (int i = 1; i <= e.second.len; i++)
+                    if (e.second.x[i] == x && e.second.y[i] == y)
                         return false;
             }
             //检查是否和边界重合
@@ -530,7 +644,11 @@ void AIsnake()
     ProtectAICnt.lock();
     AICnt++;
     ProtectAICnt.unlock();
-    AIsnakeList.insert(aisnake);
+
+    ProtectAIsnakeList.lock();
+    AIsnakeList[myid]=aisnake;
+    ProtectAIsnakeList.unlock();
+
     ProtectCursor.lock();
     gotoxy(aisnake.x[1], aisnake.y[1]);
     cout << "%";//打印蛇头
@@ -543,40 +661,48 @@ void AIsnake()
         cout << "%";
     }
     ProtectCursor.unlock();
-    //将AI蛇加入列表
-    AIsnakeList.insert(aisnake);
     //ai贪吃蛇的每回合运行控制
     bool AIisEaten = false;
     while (1)
     {
         ProtectonGame.lock();
-        if (onGame = false) {
+        if (onGame == false) {
+            ProtectonGame.unlock();
             break;
         }
         ProtectonGame.unlock();
         ProtectCursor.lock();
-        check_foodeating(aisnake, AIisEaten);
+        check_foodeating_ai(aisnake, AIisEaten);
         move_snake_ai(aisnake, AIisEaten);
         ProtectCursor.unlock();
+
+        ProtectAIsnakeList.lock();
+        AIsnakeList[myid] = aisnake;
+        ProtectAIsnakeList.unlock();
+
         Sleep(aisnake.speed * 1000);//控制速度（与长度呈反比）
         if (!check_snakealive(aisnake)) {
             ProtectCursor.lock();
             for (int i = 1; i <= aisnake.len; i++) {
                 gotoxy(aisnake.x[i], aisnake.y[i]);
-                cout << " ";
                 cout << "#";
             }
             ProtectCursor.unlock();
             break;
         }
     }
+    //死亡的时候将AI蛇的分数加到玩家上
+    Protectusersnake.lock();
+    usersnake.score += aisnake.score;
+    Protectusersnake.unlock();
+
     ProtectAICnt.lock();
     AICnt--;
     ProtectAICnt.unlock();
     return;
 }
 
-void move_snake_ai(Snake& snake, bool AIisEaten)
+void move_snake_ai(Snake& snake, bool& AIisEaten)
 {
     char com = ' ';
     com = AICheckWheretogo(snake);
@@ -648,5 +774,71 @@ void move_snake_ai(Snake& snake, bool AIisEaten)
 
 
 char AICheckWheretogo(Snake& snake) {
-    return 'w';
+    //寻找距离蛇头最近的食物
+    Food myfoodpos = { -INF,-INF,0 };
+    Protectfoodlist.lock();
+    for (auto& e : foodlist) {
+        if ((abs(e.second.x - snake.x[1]) + abs(e.second.y - snake.y[1])) <= (abs(myfoodpos.x - snake.x[1]) + abs(myfoodpos.y - snake.y[1]))) {
+            myfoodpos = e.second;
+        }
+    }
+    Protectfoodlist.unlock();
+    //如果找不到
+    if (myfoodpos.x == -INF && myfoodpos.y==-INF){
+        return 'w';
+	}
+    else {
+        //首先判定蛇头在食物的上方还是下方
+        if (snake.x[1] < myfoodpos.x) {
+			//如果在下方
+            if (snake.state == 'w') {
+				//如果当前方向是向上，那么就往右走
+				return 'd';
+			}
+            else {
+				//如果当前方向不是向上，那么就往下走
+				return 's';
+			}
+		}
+        else if (snake.x[1] > myfoodpos.x) {
+			//如果在上方
+            if (snake.state == 's') {
+				//如果当前方向是向下，那么就往左走
+				return 'a';
+			}
+            else {
+				//如果当前方向不是向下，那么就往上走
+				return 'w';
+			}
+		}
+        else {
+			//如果在同一行
+            if (snake.y[1] < myfoodpos.y) {
+				//如果在右边
+                if (snake.state == 'a') {
+					//如果当前方向是向左，那么就往下走
+					return 's';
+				}
+                else {
+					//如果当前方向不是向左，那么就往右走
+					return 'd';
+				}
+			}
+            else if (snake.y[1] > myfoodpos.y) {
+				//如果在左边
+                if (snake.state == 'd') {
+					//如果当前方向是向右，那么就往上走
+					return 'w';
+				}
+                else {
+					//如果当前方向不是向右，那么就往左走
+					return 'a';
+				}
+			}
+            else {
+                return 'w';
+            }
+		}
+    }
+
 }
