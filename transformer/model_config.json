@@ -1,0 +1,21 @@
+{
+    "learning_rate": 0.000005,
+    "batch_size": 48,
+    "num_epochs": 1,
+    "optimizer": "Adam",
+    "dropout_rate": 0.1,
+    "activation_function": "relu",
+    "vocab_size": 100,
+    "d_model": 512,
+    "max_len": 256,
+    "block_nums": 6,
+    "head_nums": 8,
+    "d_ff": 2048,
+    "data_size_debug": 10000,
+    "debug_mode": 0,
+    "root_path": "/root/transformer/myTransformer",
+    "SMS_path": "/root/SMSlog/SMS_log.txt",
+    "version_name": "myTfer",
+    "mode": "test",
+    "SMS_toggle": 0
+}
