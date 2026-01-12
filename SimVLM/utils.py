@@ -44,10 +44,19 @@ def save_model(model: Any, save_path: str, training_step: int):
     ckpt_path = os.path.join(save_path, f'checkpoint-{training_step}')
     if not os.path.exists(ckpt_path):
         os.makedirs(ckpt_path)
+    # save the projector weights
     saved_file_path = os.path.join(ckpt_path, 'projector_weights.pth')
-    ColoredLogger.info(f'Saving model at step {training_step} to {saved_file_path}')
+    ColoredLogger.info(f'Saving projector at step {training_step} to {saved_file_path}')
     import torch
     torch.save(model.projector.state_dict(), saved_file_path)
+    # save the llm 
+    llm_save_path = os.path.join(ckpt_path, 'llm')
+    ColoredLogger.info(f'Saving llm at step {training_step} to {llm_save_path}')
+    model.llm.save_pretrained(llm_save_path)
+    # save the tokenizer
+    tokenizer_save_path = os.path.join(ckpt_path, 'llm')
+    ColoredLogger.info(f'Saving tokenizer at step {training_step} to {tokenizer_save_path}')
+    model.tokenizer.save_pretrained(tokenizer_save_path)
     ColoredLogger.info('Model saved successfully.')
 
 class SimVLMDataset(Dataset):
